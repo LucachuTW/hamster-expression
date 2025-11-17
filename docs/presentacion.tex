@@ -1,0 +1,113 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usepackage[spanish]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+
+\title{Hamster Expression}
+\subtitle{Objetivo general y funcionamiento de la IA (YOLOv1)}
+\author{Equipo Hamster Expression}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Objetivo del proyecto}
+  \begin{itemize}
+    \item Entregar una experiencia en tiempo real que detecte la emoci\'on predominante del usuario usando la c\'amara del navegador.
+    \item Conectar un frontend ligero (HTML/CSS/JS) con un backend FastAPI que sirve un detector entrenado desde cero.
+    \item Mantener los pesos y el dataset local para poder seguir iterando sobre el modelo sin dependencias externas.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Componentes principales}
+  \begin{itemize}
+    \item \textbf{Frontend}: captura frames de la c\'amara, los convierte a JPEG Base64 y consulta \texttt{/api/predict/stream} cada segundo.
+    \item \textbf{Backend}: servicio FastAPI con CORS abierto, ruta de salud y endpoints de inferencia sin bloqueo.
+    \item \textbf{Servicio de detecci\'on}: instancia \'unica de \texttt{EmotionPredictor} (cach\'e con \texttt{lru\_cache}) que carga los pesos desde \texttt{backend/artifacts/weights/emotion\_detector.pt}.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Flujo extremo a extremo}
+  \begin{enumerate}
+    \item El navegador solicita permisos, captura el frame y lo serializa (\texttt{canvas.toDataURL}).
+    \item El backend decodifica el JPEG, normaliza la imagen (256$\times$256) y ejecuta el modelo en GPU/CPU.
+    \item Se devuelven las cajas filtradas por \textit{non-max suppression} y el cliente actualiza el panel visual y el arte tem\'atico.
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{Dataset y etiqueta}
+  \begin{itemize}
+    \item Se utiliza \textbf{9 Facial Expressions You Need} dividido en \texttt{train/} y \texttt{valid/}.
+    \item Etiquetas en formato YOLO: \texttt{clase x\_c y\_c ancho alto} con valores normalizados.
+    \item El \texttt{EmotionDataset} traduce esas etiquetas a tensores de tama\~no $S \times S \times (5B + C)$ con $S=7$, $B=1$, $C=9$.
+    \item Data augmentation leve: \texttt{ColorJitter} y \texttt{Resize} para robustecer al detector.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Recordatorio YOLOv1}
+  \begin{itemize}
+    \item La imagen se subdivide en una rejilla $S \times S$; cada celda predice $B$ cajas y $C$ probabilidades de clase.
+    \item La red optimiza una p\'erdida multi-t\'ermino que combina coordenadas, presencia de objeto y clase.
+    \item La salida final para un batch es un tensor de forma $(N, 7, 7, 5B + C)$; aqu\'i $5B + C = 14$.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Arquitectura del detector}
+  \begin{itemize}
+    \item Pila de bloques convolucionales con canales \{3, 32, 64, 128, 256, 512\}, cada uno seguido por \texttt{MaxPool} para ir reduciendo resoluci\'on (factor total $\times 32$).
+    \item Cabezal completamente conectado: \texttt{Flatten} $\rightarrow$ \texttt{Linear(1024)} $\rightarrow$ \texttt{Dropout} $\rightarrow$ \texttt{Linear(S$^2$ (5B + C))}.
+    \item Se aplica \texttt{LeakyReLU} en todos los bloques y regularizaci\'on con \texttt{Dropout 0.25}.
+    \item La salida se reorganiza como \texttt{(batch, 7, 7, 14)} para mapear cada celda de la rejilla.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Desglose de capas}
+  \begin{itemize}
+    \item Cada bloque: \texttt{Conv2d(k=3, stride=1, padding=1, bias=False)} $\rightarrow$ \texttt{BatchNorm} $\rightarrow$ \texttt{LeakyReLU(0.1)} estabiliza gradientes y acelera la convergencia.
+    \item Despu\'es de cada bloque se aplica \texttt{MaxPool2d(2,2)}, reduciendo la resoluci\'on 256$\times$256 $\rightarrow$ 128 $\rightarrow$ 64 $\rightarrow$ 32 $\rightarrow$ 16 $\rightarrow$ 8.
+    \item El mapa final $8 \times 8 \times 512$ (32768 valores) se aplana y pasa por \texttt{Linear(32768, 1024)} para mezclar contexto global.
+    \item \texttt{Dropout(0.25)} en el cabezal evita sobreajuste; el \texttt{Linear} final proyecta a $7 \times 7 \times 14$ logits (coordenadas, confianza y 9 clases).
+    \item El dise\~no evita capas 1$\times$1 o atajos; la simplicidad mantiene entrenamientos estables con datos limitados.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{P\'erdida y entrenamiento}
+  \begin{itemize}
+    \item Optimizador Adam con \texttt{lr=1e-4}, \texttt{batch\_size=8} y \texttt{clip\_grad=5}.
+    \item P\'erdida \texttt{YoloLoss}: MSE sobre coordenadas y clases s\'olo cuando hay objeto, con ponderaciones $\lambda_{coord}=5$ y $\lambda_{noobj}=0.5$.
+    \item Evaluaci\'on por \'epoca en el conjunto de validaci\'on para guardar el mejor checkpoint.
+    \item Entrenamiento trazado por \texttt{tqdm} y logging para seguimiento reproducible.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Inferencia y despliegue}
+  \begin{itemize}
+    \item El predictor aplica \texttt{sigmoid} a coordenadas/confianza, convierte las celdas en cajas absolutas y filtra con IoU=0.5.
+    \item Predicciones expuestas v\'ia REST (subida de archivo) y streaming (Base64), listas para integrarse con la UI o cualquier cliente.
+    \item Posible extensi\'on: empaquetar todo en Docker usando \texttt{tools/run\_docker.sh} para despliegues reproducibles.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Flujo de inferencia detallado}
+  \begin{enumerate}
+    \item \textbf{Preprocesado}: imagen en bytes $\rightarrow$ RGB $\rightarrow$ tensor 256$\times$256, normalizado en $[0,1]$.
+    \item \textbf{Extracci\'on}: los 5 bloques convolucionales capturan texturas finas y patrones globales reduciendo la rejilla a $8\times8\times512$.
+    \item \textbf{Cabezal}: \texttt{Flatten} $8\times8\times512 \rightarrow 32768$, \texttt{Linear} + \texttt{LeakyReLU} genera 1024 activaciones compactas.
+    \item \textbf{Predicci\'on}: \texttt{Linear} final produce 686 valores reordenados como $(7,7,14)$; se aplican \texttt{sigmoid} y \texttt{softmax} para coordenadas y clases.
+    \item \textbf{Post-proceso}: \texttt{cells\_to\_bboxes} convierte offsets a coordenadas absolutas, combina confianza $\times$ probabilidad y \texttt{non\_max\_suppression} elimina solapamientos.
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{Pr\'oximos pasos}
+  \begin{itemize}
+    \item Integrar m\'etricas adicionales (precisi\'on, recall) y visualizaciones para evaluar el desempeño real.
+    \item Probar variantes YOLOv2/v3 o arquitecturas ligeras tipo MobileNet si se requiere mayor FPS.
+    \item Aumentar el dataset propio de hamster o usuarios reales para mejorar la generalizaci\'on de las expresiones.
+  \end{itemize}
+\end{frame}
+
+\end{document}
