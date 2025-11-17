@@ -34,6 +34,7 @@ fi
 
 docker run --rm -it \
   -p 8000:8000 \
+  -p 5500:5500 \
   -v "${PROJECT_ROOT}":/workspace \
   "${EXTRA_ARGS[@]}" \
   --name "${CONTAINER_NAME}" \
