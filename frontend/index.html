@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emotion Detection UI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <h1>Real-Time Emotion Detection</h1>
+        <p>Camera feed on the left, reaction art on the right.</p>
+      </header>
+      <section class="content">
+        <div class="video-panel">
+          <video id="camera" autoplay playsinline></video>
+          <canvas id="frame-canvas" class="hidden"></canvas>
+          <div id="status">Initializing camera...</div>
+        </div>
+        <div class="emotion-panel">
+          <h2 id="emotion-label">Waiting for prediction</h2>
+          <p id="confidence-label"></p>
+          <img id="emotion-image" src="" alt="Emotion art" />
+        </div>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

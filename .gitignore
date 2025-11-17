@@ -1,0 +1,47 @@
+# General
+*.log
+*.swp
+*.tmp
+*~
+.DS_Store
+Thumbs.db
+
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+.mypy_cache/
+.pytest_cache/
+.coverage*
+pip-wheel-metadata/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build & distribution folders
+build/
+dist/
+
+# Checkpoints & artifacts
+backend/artifacts/
+*.pt
+*.pth
+*.onnx
+
+# Dataset & archives
+9 Facial Expressions you need/
+archive.zip
+
+# Editor/IDE settings
+.idea/
+.vscode/
+
+# Node/Frontend (safety)
+node_modules/
+npm-debug.log
+yarn-error.log
